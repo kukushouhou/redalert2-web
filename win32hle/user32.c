@@ -583,6 +583,9 @@ static void u_PeekMessageA(void) {                       /* (msg, hwnd, min, max
     msg_t m;
     int remove = A32(4) & 1;
     if (!next_message(&m, A32(1), A32(2), A32(3), remove)) {
+        /* the launcher's launch message is waited for alone (0xBEEF..0xBEEF) and
+         * no one here posts it: answer the wait with one (kernel32_ext) */
+        if ((A32(2) & 0xFFFFu) == 0xBEEFu && A32(3) == 0xBEEFu) hle_launcher_message();
         pump();
         if (!next_message(&m, A32(1), A32(2), A32(3), remove)) RET(0, 5);
     }

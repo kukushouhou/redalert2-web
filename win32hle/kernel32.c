@@ -356,7 +356,20 @@ static void k_CreateEventA(void) {                       /* (sa, manual, initial
     RET(h, 4);
 }
 void hle_set_event(uint32_t h) { hevent *e = (hevent *)hle_handle_obj(h, HLE_H_EVENT); if (e) e->signaled = 1; }
-static void k_OpenEventA(void) { uint32_t h = named_find(ASTR(2)); if (!h) g_last_error = 2; RET(h, 3); }
+static void k_OpenEventA(void) {
+    uint32_t h = named_find(ASTR(2));
+    /* The launcher's notification event ("COPYPROTECTION - Notify launcher",
+     * SetEvent through it at 0x49F674): a real one, so the notify does not
+     * spin for its 60 s timeout. */
+    if (!h && ASTR(2) && !strcmp(ASTR(2), "D6E7FC97-64F9-4d28-B52C-754EDF721C6F")) {
+        hevent *e = (hevent *)calloc(1, sizeof *e);
+        e->signaled = 1;
+        h = hle_handle_alloc(HLE_H_EVENT, e);
+        named_add(ASTR(2), h);
+    }
+    if (!h) g_last_error = 2;
+    RET(h, 3);
+}
 static void k_SetEvent(void)   { hevent *e = (hevent *)hle_handle_obj(A32(0), HLE_H_EVENT); if (e) e->signaled = 1; RET(e ? 1u : 0u, 1); }
 static void k_ResetEvent(void) { hevent *e = (hevent *)hle_handle_obj(A32(0), HLE_H_EVENT); if (e) e->signaled = 0; RET(e ? 1u : 0u, 1); }
 static void k_PulseEvent(void) { hevent *e = (hevent *)hle_handle_obj(A32(0), HLE_H_EVENT); if (e) e->signaled = 0; RET(e ? 1u : 0u, 1); }
@@ -366,6 +379,10 @@ static void k_CreateMutexA(void) {                       /* (sa, initialOwner, n
     if (!closer) hle_handle_set_closer(HLE_H_MUTEX, free_obj), closer = 1;
     uint32_t h = named_find(ASTR(2));
     if (h) { g_last_error = ERROR_ALREADY_EXISTS; RET(h, 3); }
+    /* The game will not start unless its launcher's mutex (checked at 0x49F5C0,
+     * "COPYPROTECTION - Checking if launcher is running") already exists: the
+     * launcher is not here, so its mutex is answered as taken. */
+    if (ASTR(2) && !strcmp(ASTR(2), "48BC11BD-C4D7-466b-8A31-C6ABBAD47B3E")) { g_last_error = ERROR_ALREADY_EXISTS; RET(0, 3); }
     hmutex *m = (hmutex *)calloc(1, sizeof *m);
     if (A32(1)) m->owner = hle_thread_id(), m->count = 1;
     h = hle_handle_alloc(HLE_H_MUTEX, m);

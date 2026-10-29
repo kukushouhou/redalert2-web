@@ -148,6 +148,7 @@ void  hle_yield(void);
  * So the optional SDL present/input layer can inject translated events, and a
  * host can drive the queue, without user32 depending on SDL. */
 void     hle_post_message(uint32_t hwnd, uint32_t message, uint32_t wParam, uint32_t lParam);
+void     hle_launcher_message(void);     /* the launcher's 0xBEEF launch message, answered (kernel32_ext) */
 int      hle_msg_pop(uint32_t *message, uint32_t *wParam, uint32_t *lParam);  /* 1 if one popped */
 uint32_t hle_first_hwnd(void);           /* the first created window, or 0 */
 void     hle_set_pump_hook(void (*fn)(void)); /* called when the queue is empty (present layer) */

@@ -43,8 +43,9 @@ import http from 'node:http';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
 
-const WEB = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');   /* pathname alone is /E:/... on Windows */
 const av = process.argv.slice(2);
 const opt = (name, def) => { const i = av.indexOf(name); return i >= 0 && i + 1 < av.length ? av[i + 1] : def; };
 const PORT = +opt('--port', 8780), HOST = opt('--host', '127.0.0.1'), PUBLIC = av.includes('--public'), RELAY = opt('--relay', '');

@@ -32,8 +32,9 @@ import { spawn } from 'node:child_process';
 import net from 'node:net';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
+import { fileURLToPath } from 'node:url';
 
-const WEB = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CHROME = process.env.RA2WEB_CHROME;
 const profile = process.env.RA2WEB_CHROME_PROFILE, cache = process.env.RA2WEB_CHROME_CACHE;
 if (!profile || !cache) { console.error('source tools/env.sh first (Chrome\'s profile and cache go in work/)'); process.exit(2); }

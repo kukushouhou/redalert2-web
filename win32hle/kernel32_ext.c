@@ -725,22 +725,50 @@ static void k_CreateFileMappingA(void) {                 /* (hFile, sa, protect,
 }
 #define MAX_VIEWS 64
 static struct { uint32_t addr, len; } g_views[MAX_VIEWS];
-static void k_MapViewOfFile(void) {                      /* (hMap, access, offHigh, offLow, bytes) */
+/* the view for (hMap, access, offHigh, offLow, bytes) in the machine's argument
+ * slots: 0 (and the last error set) when it cannot */
+static uint32_t map_view(void) {
     hmapping *m = (hmapping *)hle_handle_obj(A32(0), HLE_H_MAPPING);
     uint64_t off = (uint64_t)A32(2) << 32 | A32(3);
-    if (!m || off >= m->size) { hle_set_last_error(6); RET(0, 5); }
+    if (!m || off >= m->size) { hle_set_last_error(6); return 0; }
     uint64_t len = A32(4) ? A32(4) : m->size - off;
     int copy = A32(1) == 1;                                /* FILE_MAP_COPY */
     int prot = PROT_READ | (m->writable || copy ? PROT_WRITE : 0);
     /* the view lives in guest memory: reserve it there, then put the file over
      * it (a pagefile mapping is the reservation's own zeroed pages) */
     uint32_t va = hle_vm_reserve(0, (uint32_t)len);
-    if (!va) { hle_set_last_error(8); RET(0, 5); }       /* ERROR_NOT_ENOUGH_MEMORY */
+    if (!va) { hle_set_last_error(8); return 0; }        /* ERROR_NOT_ENOUGH_MEMORY */
     if (m->fd >= 0 && mmap(hle_ptr(va), len, prot, MAP_FIXED | (copy ? MAP_PRIVATE : MAP_SHARED), m->fd, (off_t)off) == MAP_FAILED) {
-        hle_vm_release(va, (uint32_t)len); hle_set_last_error(8); RET(0, 5);
+        hle_vm_release(va, (uint32_t)len); hle_set_last_error(8); return 0;
     }
     for (int i = 0; i < MAX_VIEWS; i++) if (!g_views[i].addr) { g_views[i].addr = va, g_views[i].len = (uint32_t)len; break; }
-    RET(va, 5);
+    return va;
+}
+static void k_MapViewOfFile(void) {                      /* (hMap, access, offHigh, offLow, bytes) */
+    RET(map_view(), 5);
+}
+static void k_MapViewOfFileEx(void) {                    /* (hMap, access, offHigh, offLow, bytes, base) */
+    (void)A32(5);                                        /* the suggested base: ignored (the game passes 0) */
+    RET(map_view(), 6);
+}
+/* The Steam launcher's launch message (0xBEEF, its lParam a file mapping whose
+ * text the game only logs at 0x49F740): nothing here plays the launcher, so
+ * when the game asks for that message alone (its 10 s wait at 0x49F6C9), one
+ * is answered with an anonymous mapping of our own. */
+uint32_t hle_anon_mapping(uint32_t size) {
+    static int closer_set;
+    if (!closer_set) hle_handle_set_closer(HLE_H_MAPPING, mapping_closer), closer_set = 1;
+    hmapping *m = (hmapping *)malloc(sizeof *m);
+    if (!m) return 0;
+    m->fd = -1, m->size = size, m->writable = 1;
+    uint32_t h = hle_handle_alloc(HLE_H_MAPPING, m);
+    if (!h) mapping_closer(m);
+    return h;
+}
+void hle_launcher_message(void) {
+    static uint32_t h;
+    if (!h) h = hle_anon_mapping(0x1000u);
+    if (h) hle_post_message(hle_first_hwnd(), 0xBEEFu, 0, h);
 }
 static void k_UnmapViewOfFile(void) {
     for (int i = 0; i < MAX_VIEWS; i++)
@@ -768,6 +796,7 @@ const win32hle_shim win32hle_kernel32_ext[] = {
     { "CreateToolhelp32Snapshot", k_CreateToolhelp32Snapshot }, { "Process32First", k_Process32First },
     { "Process32Next", k_Process32First }, { "OpenProcess", k_OpenProcess },
     { "CreateFileMappingA", k_CreateFileMappingA }, { "MapViewOfFile", k_MapViewOfFile },
+    { "MapViewOfFileEx", k_MapViewOfFileEx },
     { "UnmapViewOfFile", k_UnmapViewOfFile },
     { "GetFullPathNameA", k_GetFullPathNameA },
     { "_lopen", k__lopen }, { "_lcreat", k__lcreat }, { "_lread", k__lread },
